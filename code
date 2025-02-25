@@ -1,0 +1,152 @@
+---- Zadanie 1: Liczba dni wypożyczenia każdej książki (uwzględniając niezwrócone)
+SELECT 
+    B.Title AS BookTitle,
+    SUM(
+        CASE 
+            WHEN BB.ReturnDate IS NULL THEN DATEDIFF(CURDATE(), BB.BorrowDate)
+            ELSE DATEDIFF(BB.ReturnDate, BB.BorrowDate)
+        END
+    ) AS TotalRentalDays
+FROM borrowedbooks BB
+JOIN books B ON BB.BookID = B.BookID
+GROUP BY B.Title
+ORDER BY TotalRentalDays DESC;
+
+
+----  Zadanie 2: Klienci, którzy dołączyli w ostatnich 3 miesiącach
+SELECT 
+    FirstName,
+    LastName
+FROM members
+WHERE JoinDate > CURDATE() - INTERVAL 3 MONTH
+ORDER BY JoinDate DESC;
+
+
+---- Zadanie 3: Całkowita cena książek w każdym gatunku
+SELECT
+    Genre,
+    ROUND(SUM(Price), 2) AS TotalPrice
+FROM books
+GROUP BY Genre
+ORDER BY TotalPrice DESC;
+
+
+---- Zadanie 4: Liczba wypożyczeń według kategorii członkostwa + Top 10 aktywnych klientów
+-- 4a. Wypożyczenia według kategorii członkostwa
+SELECT 
+    M.MembershipType,
+    COUNT(BB.BorrowID) AS NumberOfBorrowedBooks
+FROM members M
+LEFT JOIN borrowedbooks BB ON M.MemberID = BB.MemberID
+GROUP BY M.MembershipType;
+
+-- 4b. Top 10 najbardziej aktywnych klientów
+SELECT 
+    CONCAT(M.FirstName, ' ', M.LastName) AS FullName,
+    COALESCE(COUNT(BB.BorrowID), 0) AS NumberOfBorrowedBooks
+FROM members M
+LEFT JOIN borrowedbooks BB ON M.MemberID = BB.MemberID
+GROUP BY FullName
+ORDER BY NumberOfBorrowedBooks DESC
+LIMIT 10;
+
+
+---- Zadanie 5: Lista książek z klientem, który je wypożyczył
+SELECT 
+    B.Title AS BookTitle,
+    CONCAT(M.FirstName, ' ', M.LastName) AS FullName
+FROM borrowedbooks BB
+JOIN members M ON BB.MemberID = M.MemberID
+JOIN books B ON BB.BookID = B.BookID
+ORDER BY B.Title;
+
+
+---- Zadanie 6: Klienci, którzy nie zwrócili książek
+SELECT DISTINCT
+    CONCAT(M.FirstName, ' ', M.LastName) AS FullName
+FROM members M
+JOIN borrowedbooks BB ON M.MemberID = BB.MemberID
+WHERE BB.ReturnDate IS NULL;
+
+
+---- Zadanie 7: Klienci z mniej niż 3 wypożyczeniami (CTE)
+WITH TotalBorrowedBooks AS (
+    SELECT 
+        CONCAT(M.FirstName, ' ', M.LastName) AS FullName,
+        COUNT(BB.BookID) AS NumberOfBooks
+    FROM members M
+    LEFT JOIN borrowedbooks BB ON M.MemberID = BB.MemberID
+    GROUP BY FullName
+)
+SELECT *
+FROM TotalBorrowedBooks
+WHERE NumberOfBooks < 3
+ORDER BY NumberOfBooks DESC;
+
+
+---- Zadanie 8: Klasyfikacja książek według ceny
+SELECT 
+    Title,
+    CASE 
+        WHEN Price < 10 THEN 'Low'
+        WHEN Price >= 10 AND Price < 30 THEN 'Middle'
+        ELSE 'High'
+    END AS PriceCategory
+FROM books;
+
+
+---- Zadanie 9: Klasyfikacja klientów – Nowi vs Stali
+SELECT
+    FirstName,
+    LastName,
+    CASE 
+        WHEN JoinDate > CURDATE() - INTERVAL 1 YEAR THEN 'Nowi'
+        ELSE 'Stali'
+    END AS Status
+FROM members;
+
+
+---- Zadanie 10: Klienci wypożyczający regularnie (min. raz na 2 miesiące)
+SELECT 
+    CONCAT(M.FirstName, ' ', M.LastName) AS FullName,
+    COUNT(DISTINCT DATE_FORMAT(BB.BorrowDate, '%Y-%m')) AS ActiveMonths
+FROM members M
+JOIN borrowedbooks BB ON M.MemberID = BB.MemberID
+GROUP BY FullName
+HAVING ActiveMonths >= 6
+ORDER BY ActiveMonths DESC;
+
+
+---- Zadanie 11: Książki wypożyczone najdłużej (nadal niezwrócone)
+WITH BooksNotReturned AS (
+    SELECT 
+        BookID,
+        DATEDIFF(CURDATE(), BorrowDate) AS RentalDays
+    FROM borrowedbooks
+    WHERE ReturnDate IS NULL
+)
+SELECT
+    B.Title AS BookTitle,
+    BNR.RentalDays
+FROM BooksNotReturned BNR
+JOIN books B ON BNR.BookID = B.BookID
+ORDER BY BNR.RentalDays DESC;
+
+
+---- Zadanie 12: Klienci wypożyczający przez 3 kolejne miesiące w ostatnim roku
+WITH MonthlyBorrows AS (
+    SELECT 
+        M.MemberID,
+        DATE_FORMAT(BB.BorrowDate, '%Y-%m') AS BorrowMonth
+    FROM members M
+    JOIN borrowedbooks BB ON M.MemberID = BB.MemberID
+    WHERE BB.BorrowDate >= CURDATE() - INTERVAL 1 YEAR
+    GROUP BY M.MemberID, BorrowMonth
+)
+SELECT 
+    CONCAT(M.FirstName, ' ', M.LastName) AS FullName
+FROM members M
+JOIN MonthlyBorrows MB ON M.MemberID = MB.MemberID
+GROUP BY M.MemberID
+HAVING COUNT(DISTINCT MB.BorrowMonth) >= 3
+ORDER BY FullName;
